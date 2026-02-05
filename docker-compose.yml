@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader-app
+    restart: unless-stopped
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.video-downloader.rule=Host(`downloader.agenteaiteste.shop`)"
+      - "traefik.http.routers.video-downloader.entrypoints=websecure"
+      - "traefik.http.routers.video-downloader.tls=true"
+      - "traefik.http.routers.video-downloader.tls.certresolver=letsencrypt"
+      - "traefik.http.services.video-downloader.loadbalancer.server.port=5000"
+      # Middleware para limite de upload (500MB)
+      - "traefik.http.middlewares.video-downloader-limit.buffering.maxRequestBodyBytes=524288000"
+      - "traefik.http.routers.video-downloader.middlewares=video-downloader-limit"
+
+networks:
+  web:
+    external: true
+
+volumes:
+  downloads:
+  logs:
