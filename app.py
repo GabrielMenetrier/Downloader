@@ -124,7 +124,8 @@ def process_single_video(url):
                 'title': video_title,
                 'thumbnail': thumbnail,
                 'duration': duration,
-                'download_path': os.path.basename(video_filename),
+                'video_id': video_id,
+                #'download_path': os.path.basename(video_filename),
                 'transcription': transcription,
                 'url': url
             }
@@ -242,17 +243,26 @@ def transcribe_with_elevenlabs(audio_path):
             'segments': []
         }
 
-@app.route('/download/<filename>')
-def download_file(filename):
-    """Rota para download de arquivos"""
+@app.route('/download/<video_id>')
+def download_file(video_id):
     try:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.exists(file_path):
-            return send_file(file_path, as_attachment=True)
-        else:
+        downloads_dir = app.config['UPLOAD_FOLDER']
+
+        # procurar arquivo que começa com o video_id
+        matching_files = [
+            f for f in os.listdir(downloads_dir)
+            if f.startswith(video_id)
+        ]
+
+        if not matching_files:
             return jsonify({'error': 'Arquivo não encontrado'}), 404
+
+        file_path = os.path.join(downloads_dir, matching_files[0])
+        return send_file(file_path, as_attachment=True)
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/cleanup', methods=['POST'])
 def cleanup():

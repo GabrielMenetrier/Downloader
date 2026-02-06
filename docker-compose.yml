@@ -13,7 +13,7 @@ services:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
       # Descomente se usar ElevenLabs:
-      # - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     networks:
       - web
     labels:
@@ -23,8 +23,8 @@ services:
       # HTTP Router
       - "traefik.http.routers.video-downloader.rule=Host(`downloader.agenteaiteste.shop`)"
       - "traefik.http.routers.video-downloader.entrypoints=websecure"
-      - "traefik.http.routers.video-downloader.tls=true"
-      - "traefik.http.routers.video-downloader.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.video-downloader.tls=false"
+      #- "traefik.http.routers.video-downloader.tls.certresolver=letsencrypt"
       
       # Service
       - "traefik.http.services.video-downloader.loadbalancer.server.port=5000"

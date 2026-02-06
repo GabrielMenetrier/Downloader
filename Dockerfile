@@ -17,6 +17,9 @@ COPY requirements.txt .
 # Instalar dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Instalar Gunicorn para produção
+RUN pip install gunicorn
+
 # Copiar o resto da aplicação
 COPY . .
 
@@ -29,6 +32,7 @@ EXPOSE 5000
 # Variáveis de ambiente
 ENV FLASK_APP=app.py
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=production
 
-# Comando para iniciar a aplicação
-CMD ["python", "app.py"]
+# Comando para iniciar com Gunicorn (servidor de produção)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
