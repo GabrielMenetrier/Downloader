@@ -22,7 +22,7 @@ services:
       
       # HTTP Router
       - "traefik.http.routers.video-downloader.rule=Host(`downloader.agenteaiteste.shop`)"
-      - "traefik.http.routers.video-downloader.entrypoints=websecure"
+      - "traefik.http.routers.video-downloader.entrypoints=web"
       - "traefik.http.routers.video-downloader.tls=false"
       #- "traefik.http.routers.video-downloader.tls.certresolver=letsencrypt"
       

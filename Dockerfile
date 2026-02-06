@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Instalar Gunicorn para produção
 RUN pip install gunicorn
+RUN pip install "yt-dlp[default,curl_cffi]"
 
 # Copiar o resto da aplicação
 COPY . .
