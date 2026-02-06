@@ -2,34 +2,38 @@ version: '3.8'
 
 services:
   video-downloader:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: video-downloader-app
     restart: unless-stopped
     volumes:
       - ./downloads:/app/downloads
-      - ./logs:/app/logs
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
-      # IMPORTANTE: Configure sua API key do ElevenLabs
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      # Descomente se usar ElevenLabs:
+      # - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     networks:
       - web
     labels:
+      # Traefik
       - "traefik.enable=true"
+      
+      # HTTP Router
       - "traefik.http.routers.video-downloader.rule=Host(`downloader.agenteaiteste.shop`)"
       - "traefik.http.routers.video-downloader.entrypoints=websecure"
       - "traefik.http.routers.video-downloader.tls=true"
       - "traefik.http.routers.video-downloader.tls.certresolver=letsencrypt"
+      
+      # Service
       - "traefik.http.services.video-downloader.loadbalancer.server.port=5000"
-      # Middleware para limite de upload (500MB)
+      
+      # Middlewares
       - "traefik.http.middlewares.video-downloader-limit.buffering.maxRequestBodyBytes=524288000"
-      - "traefik.http.routers.video-downloader.middlewares=video-downloader-limit"
+      - "traefik.http.middlewares.video-downloader-compress.compress=true"
+      - "traefik.http.routers.video-downloader.middlewares=video-downloader-limit,video-downloader-compress"
 
 networks:
   web:
     external: true
-
-volumes:
-  downloads:
-  logs:
