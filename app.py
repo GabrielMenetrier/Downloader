@@ -57,7 +57,7 @@ def process_single_video(url):
     # Configurações base do yt-dlp
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
-        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_%(title)s.%(ext)s'),
+        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}.%(ext)s'),
         'quiet': False,
         'no_warnings': False,
         'extractor_retries': 3,
@@ -143,7 +143,7 @@ def extract_audio(video_id, url, is_tiktok, is_instagram):
     """Extrai áudio do vídeo"""
     audio_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_%(title).50s.%(ext)s'),
+        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_audio.%(ext)s'),
         'restrictfilenames': True, # Isso remove espaços e caracteres especiais do nome do arquivo
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -247,23 +247,25 @@ def transcribe_with_elevenlabs(audio_path):
 @app.route('/download/<video_id>')
 def download_file(video_id):
     try:
+        # Como salvamos apenas como id.mp4, apontamos direto
+        # O yt-dlp pode salvar como .mp4 ou .webm, então ainda checamos a extensão
         downloads_dir = app.config['UPLOAD_FOLDER']
         
-        # Filtramos para pegar o VÍDEO (evitando pegar o .mp3 da transcrição se ele ainda existir)
-        # E garantimos que o nome comece exatamente com o video_id
-        matching_files = [
-            f for f in os.listdir(downloads_dir)
-            if f.startswith(video_id) and f.lower().endswith(('.mp4', '.mkv', '.webm'))
-        ]
+        # Procura o arquivo exato
+        target_file = None
+        for ext in ['mp4', 'webm', 'mkv']:
+            filename = f"{video_id}.{ext}"
+            if os.path.exists(os.path.join(downloads_dir, filename)):
+                target_file = filename
+                break
 
-        if not matching_files:
-            return jsonify({'error': 'Arquivo de vídeo não encontrado'}), 404
+        if not target_file:
+            return jsonify({'error': 'Arquivo não encontrado'}), 404
 
-        # Escolhe o primeiro arquivo de vídeo encontrado
-        file_path = os.path.join(downloads_dir, matching_files[0])
-        
-        # O send_file cuida do path seguro
-        return send_file(file_path, as_attachment=True)
+        return send_file(
+            os.path.join(downloads_dir, target_file),
+            as_attachment=True
+        )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
