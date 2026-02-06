@@ -11,6 +11,8 @@ services:
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
+      # IMPORTANTE: Configure sua API key do ElevenLabs
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     networks:
       - web
     labels:

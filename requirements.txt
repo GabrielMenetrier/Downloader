@@ -1,10 +1,12 @@
+# Versão com ElevenLabs - LEVE e COMPLETA
+
 Flask==3.0.0
-yt-dlp==2024.3.10
-openai-whisper==20231117
-
-torch==2.1.2+cpu
-torchaudio==2.1.2+cpu
-
-numpy==1.24.3
-ffmpeg-python==0.2.0
+yt-dlp>=2024.12.23
 Werkzeug==3.0.1
+requests==2.31.0
+
+# ElevenLabs SDK (Speech-to-Text + Text-to-Speech)
+elevenlabs==1.5.0
+
+# Sem PyTorch/Whisper = instalação rápida!
+# Tamanho total: ~50MB vs 4GB do Whisper
