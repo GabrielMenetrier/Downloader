@@ -50,82 +50,63 @@ def process_single_video(url):
     """Processa um único vídeo: download e transcrição"""
     video_id = str(uuid.uuid4())[:8]
     
-    # Detectar plataforma
     is_tiktok = 'tiktok.com' in url.lower()
     is_instagram = 'instagram.com' in url.lower()
     
-    # Configurações base do yt-dlp
+    # IMPORTANTE: Definimos o caminho base SEM o título do vídeo aqui
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
+        # Aqui é o segredo: forçamos o nome a ser apenas o ID de 8 caracteres
         'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}.%(ext)s'),
+        'restrictfilenames': True, # Remove caracteres especiais e espaços
         'quiet': False,
         'no_warnings': False,
         'extractor_retries': 3,
-        'fragment_retries': 3,
-        'skip_unavailable_fragments': True,
     }
     
-    # Configurações específicas para TikTok
     if is_tiktok:
         ydl_opts.update({
-            'impersonate': 'chrome', # Simula um navegador Chrome
-            'http_headers': {
-                'Referer': 'https://www.tiktok.com/',
-            }
-        })
-    
-    # Configurações específicas para Instagram
-    if is_instagram:
-        ydl_opts.update({
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            }
+            'impersonate': 'chrome',
+            'http_headers': {'Referer': 'https://www.tiktok.com/'}
         })
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # 1. Extrai as informações primeiro
             info = ydl.extract_info(url, download=True)
-            
             if not info:
-                raise Exception("Não foi possível extrair informações do vídeo")
-            
+                raise Exception("Não foi possível extrair informações")
+
+            # 2. Pegamos os metadados (que ainda usaremos na interface)
             video_title = info.get('title', 'Vídeo sem título')
             thumbnail = info.get('thumbnail', '')
             duration = info.get('duration', 0)
+
+            # 3. Localizamos o arquivo real que foi baixado
+            # O yt-dlp pode mudar a extensão (ex: .webm), então buscamos o que começa com nosso ID
+            video_filename = None
+            for f in os.listdir(app.config['UPLOAD_FOLDER']):
+                if f.startswith(video_id) and not f.endswith('.mp3'):
+                    video_filename = f
+                    break
             
-            video_filename = ydl.prepare_filename(info)
-            
-            if not os.path.exists(video_filename):
-                downloads_dir = app.config['UPLOAD_FOLDER']
-                matching_files = [f for f in os.listdir(downloads_dir) 
-                                if f.startswith(video_id) and f.endswith(('.mp4', '.webm', '.mkv'))]
-                if matching_files:
-                    video_filename = os.path.join(downloads_dir, matching_files[0])
-                else:
-                    raise Exception("Arquivo de vídeo não encontrado após download")
-            
-            # Extrair áudio
+            if not video_filename:
+                raise Exception("Arquivo de vídeo não encontrado após download")
+
+            # 4. Extração de áudio e Transcrição
             audio_file = extract_audio(video_id, url, is_tiktok, is_instagram)
             
-            # Transcrever com ElevenLabs
+            transcription = {'text': 'Transcrição indisponível', 'language': 'unknown'}
             if os.path.exists(audio_file):
                 transcription = transcribe_with_elevenlabs(audio_file)
-                os.remove(audio_file)
-            else:
-                transcription = {
-                    'text': 'Transcrição não disponível (áudio não extraído)',
-                    'language': 'unknown',
-                    'segments': []
-                }
+                os.remove(audio_file) # Limpa o mp3 temporário
             
             return {
                 'success': True,
-                'video_id': video_id,
+                'video_id': video_id, # Usado pelo seu JS para o botão de download
                 'title': video_title,
                 'thumbnail': thumbnail,
                 'duration': duration,
-                'video_id': video_id,
-                #'download_path': os.path.basename(video_filename),
                 'transcription': transcription,
                 'url': url
             }
