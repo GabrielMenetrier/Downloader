@@ -157,32 +157,39 @@ function displayResults(results) {
     resultsSection.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Criar card de resultado
+// Criar card de resultado usando sistema de ID puro
 function createResultCard(result, index) {
     const card = document.createElement('div');
     card.className = 'result-card';
     
     if (!result.success) {
         card.classList.add('error');
+        card.setAttribute('data-video-id', `error-${index}`);
         card.innerHTML = `
             <div class="error-message">
                 <strong>Erro ao processar vídeo ${index + 1}</strong>
-                <p>${result.error}</p>
-                <p><small>URL: ${result.url}</small></p>
+                <p>${escapeHtml(result.error)}</p>
+                <p><small>URL: ${escapeHtml(result.url)}</small></p>
             </div>
         `;
         return card;
     }
+    
+    // Guardar ID do vídeo no elemento
+    card.setAttribute('data-video-id', result.video_id);
     
     const duration = formatDuration(result.duration);
     const language = getLanguageName(result.transcription.language);
     
     card.innerHTML = `
         <div class="result-header">
-            ${result.thumbnail ? `<img src="${result.thumbnail}" alt="Thumbnail" class="thumbnail">` : ''}
+            ${result.thumbnail ? `<img src="${escapeHtml(result.thumbnail)}" alt="Thumbnail" class="thumbnail" onerror="this.style.display='none'">` : ''}
             <div class="result-info">
                 <h3 class="result-title">${escapeHtml(result.title)}</h3>
-                <p class="result-meta">Duração: ${duration}</p>
+                <p class="result-meta">
+                    <span>Duração: ${duration}</span>
+                    <span class="video-id-badge">ID: ${result.video_id}</span>
+                </p>
                 <button class="download-btn" onclick="downloadVideo('${result.video_id}')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
@@ -197,7 +204,7 @@ function createResultCard(result, index) {
                 <h3>Transcrição</h3>
                 <span class="language-badge">${language}</span>
             </div>
-            <div class="transcription-text">
+            <div class="transcription-text" id="transcription-${result.video_id}">
                 ${escapeHtml(result.transcription.text)}
             </div>
         </div>
@@ -206,10 +213,11 @@ function createResultCard(result, index) {
     return card;
 }
 
-// Download de vídeo
-function downloadVideo(filename) {
-    window.location.href = `/download/${filename}`;
-    showNotification('Download iniciado!', 'success');
+// Download de vídeo usando apenas ID
+function downloadVideo(videoId) {
+    // Usar rota de download com ID
+    window.location.href = `/download/${videoId}`;
+    showNotification('Download iniciado! Arquivo: ' + videoId, 'success');
 }
 
 // Formatar duração
@@ -234,13 +242,15 @@ function getLanguageName(code) {
         'fr': 'Francês',
         'de': 'Alemão',
         'it': 'Italiano',
-        'error': 'Erro'
+        'error': 'Erro',
+        'unknown': 'Desconhecido'
     };
     return languages[code] || code.toUpperCase();
 }
 
-// Escape HTML
+// Escape HTML para segurança
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -310,6 +320,25 @@ style.textContent = `
             opacity: 0;
         }
     }
+    
+    .video-id-badge {
+        display: inline-block;
+        background: var(--bg-tertiary);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.85em;
+        margin-left: 10px;
+        border: 1px solid var(--border-color);
+    }
+    
+    .result-card[data-video-id] {
+        transition: all 0.3s ease;
+    }
+    
+    .result-card[data-video-id]:hover {
+        border-color: var(--accent-primary);
+    }
 `;
 document.head.appendChild(style);
 
@@ -323,3 +352,11 @@ document.addEventListener('keydown', (e) => {
         addUrlBtn.click();
     }
 });
+
+// Debug: Log de IDs processados
+window.getProcessedVideoIds = function() {
+    const cards = document.querySelectorAll('.result-card[data-video-id]');
+    return Array.from(cards).map(card => card.getAttribute('data-video-id'));
+};
+
+console.log('Video Downloader & Transcriber carregado - Sistema de ID implementado');
