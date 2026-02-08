@@ -9,7 +9,7 @@ import subprocess
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
-app.config['UPLOAD_FOLDER'] = 'downloads'
+app.config['UPLOAD_FOLDER'] = '/app/downloads'  # Caminho absoluto
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
 # Criar pasta de downloads se não existir
@@ -57,17 +57,24 @@ def process_videos():
         return jsonify({'error': str(e)}), 500
 
 def process_single_video(url):
-    """Processa um único vídeo: download e transcrição com sistema de ID puro"""
-    video_id = str(uuid.uuid4())[:12]  # ID único de 12 caracteres
+    """Processa um único vídeo: download e transcrição - APENAS ID, SEM NOME"""
+    video_id = str(uuid.uuid4()).replace('-', '')[:16]  # ID de 16 caracteres sem hífens
+    
+    print(f"[INFO] Processando vídeo ID: {video_id}")
+    print(f"[INFO] URL: {url}")
+    print(f"[INFO] Pasta downloads: {app.config['UPLOAD_FOLDER']}")
     
     # Detectar plataforma
     is_tiktok = 'tiktok.com' in url.lower()
     is_instagram = 'instagram.com' in url.lower()
     
-    # Configurações base do yt-dlp com nome de arquivo simples baseado em ID
+    # Nome do arquivo: APENAS ID.ext
+    video_filename = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}.mp4')
+    
+    # Configurações base do yt-dlp com caminho absoluto e APENAS ID
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
-        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_temp.%(ext)s'),
+        'outtmpl': video_filename,  # Caminho completo e absoluto
         'quiet': False,
         'no_warnings': False,
         'extractor_retries': 3,
@@ -109,41 +116,40 @@ def process_single_video(url):
             thumbnail = info.get('thumbnail', '')
             duration = info.get('duration', 0)
             
-            # Criar nome curto do título (primeiras 5 letras/números)
-            title_short = ''.join(c for c in video_title if c.isalnum())[:5].lower()
-            if not title_short:
-                title_short = 'video'
+            # Verificar extensão do arquivo baixado
+            actual_file = None
+            for ext in ['.mp4', '.webm', '.mkv', '.avi', '.mov']:
+                test_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}{ext}')
+                if os.path.exists(test_path):
+                    actual_file = test_path
+                    break
             
-            # Encontrar o arquivo temporário baixado
-            temp_video = ydl.prepare_filename(info)
+            # Se não encontrou com extensões comuns, procurar qualquer arquivo com o ID
+            if not actual_file:
+                for file in os.listdir(app.config['UPLOAD_FOLDER']):
+                    if file.startswith(video_id):
+                        actual_file = os.path.join(app.config['UPLOAD_FOLDER'], file)
+                        break
             
-            # Determinar extensão do arquivo
-            video_ext = 'mp4'
-            if os.path.exists(temp_video):
-                video_ext = temp_video.split('.')[-1]
-            else:
-                # Procurar arquivo com ID
-                downloads_dir = app.config['UPLOAD_FOLDER']
-                matching_files = [f for f in os.listdir(downloads_dir) 
-                                if f.startswith(f'{video_id}_temp')]
-                if matching_files:
-                    temp_video = os.path.join(downloads_dir, matching_files[0])
-                    video_ext = matching_files[0].split('.')[-1]
-                else:
-                    raise Exception("Arquivo de vídeo não encontrado após download")
+            if not actual_file or not os.path.exists(actual_file):
+                raise Exception(f"Arquivo de vídeo não encontrado. ID: {video_id}")
             
-            # Renomear para formato padrão: id_short.ext
-            final_video_name = f'{video_id}_{title_short}.{video_ext}'
-            final_video_path = os.path.join(app.config['UPLOAD_FOLDER'], final_video_name)
+            print(f"[INFO] Vídeo baixado: {actual_file}")
             
-            # Renomear arquivo
-            if os.path.exists(temp_video):
-                os.rename(temp_video, final_video_path)
+            # Renomear para formato padrão se necessário
+            final_ext = os.path.splitext(actual_file)[1]
+            final_path = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}{final_ext}')
             
-            # Extrair áudio para transcrição
+            if actual_file != final_path:
+                os.rename(actual_file, final_path)
+                print(f"[INFO] Renomeado para: {final_path}")
+            
+            # Extrair áudio para transcrição - APENAS ID
+            audio_filename = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_audio.mp3')
+            
             audio_opts = {
                 'format': 'bestaudio/best',
-                'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_audio_temp.%(ext)s'),
+                'outtmpl': audio_filename,
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
@@ -154,26 +160,19 @@ def process_single_video(url):
             
             # Adicionar headers se for TikTok ou Instagram
             if is_tiktok or is_instagram:
-                audio_opts['http_headers'] = ydl_opts['http_headers']
+                audio_opts['http_headers'] = ydl_opts.get('http_headers', {})
             
+            print(f"[INFO] Extraindo áudio...")
             with yt_dlp.YoutubeDL(audio_opts) as ydl_audio:
                 ydl_audio.download([url])
             
-            # Encontrar e renomear arquivo de áudio
-            audio_temp = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_audio_temp.mp3')
-            audio_final = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_audio.mp3')
-            
-            # Se não encontrar .mp3, procurar outros formatos
-            if not os.path.exists(audio_temp):
-                downloads_dir = app.config['UPLOAD_FOLDER']
-                audio_files = [f for f in os.listdir(downloads_dir) 
-                             if f.startswith(f'{video_id}_audio_temp')]
-                if audio_files:
-                    audio_temp = os.path.join(downloads_dir, audio_files[0])
-            
-            # Renomear áudio
-            if os.path.exists(audio_temp):
-                os.rename(audio_temp, audio_final)
+            # Procurar arquivo de áudio
+            audio_file = None
+            for ext in ['.mp3', '.m4a', '.opus', '.ogg']:
+                test_audio = os.path.join(app.config['UPLOAD_FOLDER'], f'{video_id}_audio{ext}')
+                if os.path.exists(test_audio):
+                    audio_file = test_audio
+                    break
             
             # Transcrever áudio
             transcription = {
@@ -182,25 +181,30 @@ def process_single_video(url):
                 'segments': []
             }
             
-            if os.path.exists(audio_final):
-                transcription = transcribe_audio(audio_final)
-                # Limpar arquivo de áudio temporário
-                os.remove(audio_final)
+            if audio_file and os.path.exists(audio_file):
+                print(f"[INFO] Transcrevendo áudio: {audio_file}")
+                transcription = transcribe_audio(audio_file)
+                # Limpar arquivo de áudio
+                os.remove(audio_file)
+                print(f"[INFO] Áudio temporário removido")
+            else:
+                print(f"[WARNING] Áudio não encontrado para transcrição")
             
             return {
                 'success': True,
                 'video_id': video_id,
                 'title': video_title,
-                'title_short': title_short,
                 'thumbnail': thumbnail,
                 'duration': duration,
-                'filename': final_video_name,  # Nome do arquivo final
+                'filename': os.path.basename(final_path),
                 'transcription': transcription,
                 'url': url
             }
     
     except Exception as e:
         error_message = str(e)
+        print(f"[ERROR] Falha ao processar vídeo: {error_message}")
+        
         # Mensagens de erro mais amigáveis
         if 'Unable to extract' in error_message or 'extract webpage' in error_message:
             error_message = "Este vídeo não pode ser baixado. Pode estar privado, restrito por região, ou a plataforma bloqueou o acesso."
@@ -230,6 +234,7 @@ def transcribe_audio(audio_path):
             ]
         }
     except Exception as e:
+        print(f"[ERROR] Erro na transcrição: {str(e)}")
         return {
             'text': f'Erro na transcrição: {str(e)}',
             'language': 'error',
@@ -240,41 +245,55 @@ def transcribe_audio(audio_path):
 def download_file(video_id):
     """Rota para download de arquivos usando apenas o ID"""
     try:
-        # Procurar arquivo que começa com o video_id
+        print(f"[INFO] Requisição de download para ID: {video_id}")
+        
+        # Procurar arquivo que começa com o video_id (sem incluir _audio)
         downloads_dir = app.config['UPLOAD_FOLDER']
         
-        # Encontrar arquivo com este ID
         matching_files = [f for f in os.listdir(downloads_dir) 
-                         if f.startswith(video_id) and not f.endswith('_audio.mp3')]
+                         if f.startswith(video_id) and '_audio' not in f]
         
         if not matching_files:
+            print(f"[ERROR] Nenhum arquivo encontrado com ID: {video_id}")
+            print(f"[INFO] Arquivos disponíveis: {os.listdir(downloads_dir)}")
             return jsonify({'error': 'Arquivo não encontrado'}), 404
         
         filename = matching_files[0]
         file_path = os.path.join(downloads_dir, filename)
         
+        print(f"[INFO] Enviando arquivo: {file_path}")
+        
         if os.path.exists(file_path):
-            return send_file(file_path, as_attachment=True, download_name=filename)
+            return send_file(file_path, as_attachment=True, download_name=f'{video_id}{os.path.splitext(filename)[1]}')
         else:
             return jsonify({'error': 'Arquivo não encontrado'}), 404
             
     except Exception as e:
+        print(f"[ERROR] Erro no download: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/cleanup', methods=['POST'])
 def cleanup():
     """Remove arquivos antigos da pasta de downloads"""
     try:
+        count = 0
         for filename in os.listdir(app.config['UPLOAD_FOLDER']):
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             if os.path.isfile(file_path):
                 os.remove(file_path)
-        return jsonify({'success': True, 'message': 'Arquivos removidos com sucesso'})
+                count += 1
+        
+        print(f"[INFO] {count} arquivos removidos")
+        return jsonify({'success': True, 'message': f'{count} arquivos removidos com sucesso'})
     except Exception as e:
+        print(f"[ERROR] Erro na limpeza: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # Verificar se pasta downloads existe
+    print(f"[INFO] Pasta de downloads: {app.config['UPLOAD_FOLDER']}")
+    print(f"[INFO] Pasta existe: {os.path.exists(app.config['UPLOAD_FOLDER'])}")
+    
     # Modo produção para Docker
-    import os
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
     app.run(debug=debug_mode, host='0.0.0.0', port=5000)
