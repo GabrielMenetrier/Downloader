@@ -12,8 +12,11 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = '/app/downloads'  # Caminho absoluto
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
-# Criar pasta de downloads se não existir
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'downloads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
 
 # Carregar modelo Whisper (usa o modelo base por padrão)
 whisper_model = None
